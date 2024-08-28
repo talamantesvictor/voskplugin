@@ -13,24 +13,30 @@ npx cap sync
 
 <docgen-index>
 
-* [`echo(...)`](#echo)
+* [`startRecognition()`](#startrecognition)
+* [`stopRecognition()`](#stoprecognition)
 
 </docgen-index>
 
 <docgen-api>
 <!--Update the source file JSDoc comments and rerun docgen to update the docs below-->
 
-### echo(...)
+### startRecognition()
 
 ```typescript
-echo(options: { value: string; }) => Promise<{ value: string; }>
+startRecognition() => Promise<{ text: string; }>
 ```
 
-| Param         | Type                            |
-| ------------- | ------------------------------- |
-| **`options`** | <code>{ value: string; }</code> |
+**Returns:** <code>Promise&lt;{ text: string; }&gt;</code>
 
-**Returns:** <code>Promise&lt;{ value: string; }&gt;</code>
+--------------------
+
+
+### stopRecognition()
+
+```typescript
+stopRecognition() => Promise<void>
+```
 
 --------------------
 

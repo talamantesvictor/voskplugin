@@ -5,18 +5,38 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import android.content.Context;
 
 @CapacitorPlugin(name = "VoskCap")
 public class VoskCapPlugin extends Plugin {
 
-    private VoskCap implementation = new VoskCap();
+    private VoskCap voskCap;
+
+    @Override
+    public void load() {
+        Context context = getContext();
+        voskCap = new VoskCap();
+        voskCap.initModel(context);
+    }
 
     @PluginMethod
-    public void echo(PluginCall call) {
-        String value = call.getString("value");
+    public void startRecognition(PluginCall call) {
+        call.setKeepAlive(true);
 
-        JSObject ret = new JSObject();
-        ret.put("value", implementation.echo(value));
-        call.resolve(ret);
+        voskCap.startListening(new VoskCap.RecognizedTextListener() {
+            @Override
+            public void onTextRecognized(String text) {
+                JSObject ret = new JSObject();
+                ret.put("text", text);
+                // call.resolve(ret);
+                notifyListeners("onTextRecognized", ret);
+            }
+        });
+    }
+
+    @PluginMethod
+    public void stopRecognition(PluginCall call) {
+        voskCap.stopListening();
+        call.resolve();
     }
 }
