@@ -62,8 +62,38 @@ import AVFoundation
                 self.processingQueue.async {
                     if let convertedBuffer = self.convertTo16000Hz(buffer: pcmBuffer, fromSampleRate: hwSampleRate) {
                         let recognizedText = self.recognizeData(buffer: convertedBuffer)
-                        DispatchQueue.main.async {
-                            self.onResult?(recognizedText)
+                        
+                        // Parse recognizedText as JSON
+                        if let data = recognizedText.data(using: .utf8) {
+                            do {
+                                if let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
+                                    var result = ""
+                                    
+                                    // Check if it's a partial result or final result
+                                    if let partialText = json["partial"] as? String {
+                                        result = """
+                                        {
+                                            "final": false,
+                                            "text": "\(partialText)"
+                                        }
+                                        """
+                                    } else if let finalText = json["text"] as? String {
+                                        result = """
+                                        {
+                                            "final": true,
+                                            "text": "\(finalText)"
+                                        }
+                                        """
+                                    }
+
+                                    // Send the result back
+                                    DispatchQueue.main.async {
+                                        self.onResult?(result)
+                                    }
+                                }
+                            } catch {
+                                print("Error parsing recognizedText as JSON: \(error.localizedDescription)")
+                            }
                         }
                     }
                 }
