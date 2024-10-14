@@ -52,6 +52,21 @@ import AVFoundation
     @objc public func startListening() {
         guard audioEngine == nil else { return }
 
+        // Solicitar permiso de micrófono
+        AVAudioSession.sharedInstance().requestRecordPermission { [weak self] granted in
+            guard let self = self else { return }
+            if granted {
+                DispatchQueue.main.async {
+                    self.startAudioEngine()
+                }
+            } else {
+                print("Permiso de micrófono denegado")
+                // Manejar la denegación de permisos según tus necesidades
+            }
+        }
+    }
+
+    private func startAudioEngine() {
         do {
             let hwSampleRate = audioSession.sampleRate
             print("Actual Sample Rate: \(hwSampleRate)")
@@ -60,7 +75,8 @@ import AVFoundation
             let inputNode = audioEngine.inputNode
 
             let formatPcm = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: hwSampleRate, channels: 1, interleaved: true)!
-            inputNode.installTap(onBus: 0, bufferSize: 2048, format: formatPcm) { buffer, time in
+            inputNode.installTap(onBus: 0, bufferSize: 2048, format: formatPcm) { [weak self] buffer, time in
+                guard let self = self else { return }
                 guard let pcmBuffer = buffer as? AVAudioPCMBuffer else {
                     print("Error: Received non-PCM buffer")
                     return
