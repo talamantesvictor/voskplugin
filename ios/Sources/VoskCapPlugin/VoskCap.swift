@@ -40,7 +40,6 @@ import AVFoundation
         // Early initialization of audio session
         do {
             print("Actual Sample Rate before settings: \(audioSession.sampleRate)")
-            try audioSession.setPreferredSampleRate(48000)
             try audioSession.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP])
             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
             print("Audio session initialized and activated")
@@ -68,7 +67,7 @@ import AVFoundation
 
     private func startAudioEngine() {
         do {
-            let hwSampleRate = audioSession.sampleRate
+            let hwSampleRate = AVAudioSession.sharedInstance().sampleRate
             print("Actual Sample Rate: \(hwSampleRate)")
 
             audioEngine = AVAudioEngine()
