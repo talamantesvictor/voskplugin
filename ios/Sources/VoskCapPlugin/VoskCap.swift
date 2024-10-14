@@ -37,10 +37,11 @@ import AVFoundation
             }
         }
 
-        // Move audio session setup to initModel for early initialization
+        // Early initialization of audio session
         do {
+            print("Actual Sample Rate before settings: \(audioSession.sampleRate)")
+            try audioSession.setPreferredSampleRate(48000)
             try audioSession.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP])
-            try audioSession.setPreferredSampleRate(16000)
             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
             print("Audio session initialized and activated")
         } catch {
@@ -53,6 +54,7 @@ import AVFoundation
 
         do {
             let hwSampleRate = audioSession.sampleRate
+            print("Actual Sample Rate: \(hwSampleRate)")
 
             audioEngine = AVAudioEngine()
             let inputNode = audioEngine.inputNode
