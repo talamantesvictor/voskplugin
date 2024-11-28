@@ -19,30 +19,31 @@ import AVFoundation
 
     @objc public func initModel() {
         print("initModel")
+        loadModel()
+        setupAudioSession()
+    }
 
+    private func loadModel() {
         if let modelPath = Bundle.main.path(forResource: "vosk-model-small-es-0.42", ofType: nil) {
             self.model = vosk_model_new(modelPath.cString(using: .utf8))
             self.recognizer = vosk_recognizer_new(self.model, 16000.0)
             print("Model loaded from app bundle")
+        } else if let frameworkBundle = Bundle(for: VoskCap.self).resourcePath {
+            let modelPath = frameworkBundle + "/vosk-model-small-es-0.42"
+            self.model = vosk_model_new(modelPath.cString(using: .utf8))
+            self.recognizer = vosk_recognizer_new(self.model, 16000.0)
+            print("Model loaded from POD bundle")
         } else {
-            print("Error: Model path not found in app bundle, trying in POD")
-
-            if let frameworkBundle = Bundle(for: VoskCap.self).resourcePath {
-                let modelPath = frameworkBundle + "/vosk-model-small-es-0.42"
-                self.model = vosk_model_new(modelPath.cString(using: .utf8))
-                self.recognizer = vosk_recognizer_new(self.model, 16000.0)
-                print("Model loaded from POD bundle")
-            } else {
-                print("Error: Model path not found in Pod bundle")
-            }
+            print("Error: Model path not found in any bundle")
         }
+    }
 
-        // Early initialization of audio session
+    private func setupAudioSession() {
         do {
-            print("Actual Sample Rate before settings: \(audioSession.sampleRate)")
             try audioSession.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP])
             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
             print("Audio session initialized and activated")
+            print("Actual Input Channels: \(audioSession.inputNumberOfChannels)")
         } catch {
             print("Failed to initialize and activate AVAudioSession: \(error.localizedDescription)")
         }
@@ -51,10 +52,10 @@ import AVFoundation
     @objc public func startListening() {
         guard audioEngine == nil else { return }
 
-        // Solicitar permiso de micrófono
-        AVAudioSession.sharedInstance().requestRecordPermission { [weak self] granted in
+        audioSession.requestRecordPermission { [weak self] granted in
             guard let self = self else { return }
             if granted {
+                print("Permiso de micrófono autorizado")
                 DispatchQueue.main.async {
                     self.startAudioEngine()
                 }
@@ -67,55 +68,53 @@ import AVFoundation
 
     private func startAudioEngine() {
         do {
-            let hwSampleRate = AVAudioSession.sharedInstance().sampleRate
-            print("Actual Sample Rate: \(hwSampleRate)")
+            try audioSession.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP])
+            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+            print("Audio session reconfigured for recognition")
 
             audioEngine = AVAudioEngine()
             let inputNode = audioEngine.inputNode
 
-            let formatPcm = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: hwSampleRate, channels: 1, interleaved: true)!
-            inputNode.installTap(onBus: 0, bufferSize: 2048, format: formatPcm) { [weak self] buffer, time in
+            let inputFormat = inputNode.inputFormat(forBus: 0)
+            print("Input Format Sample Rate: \(inputFormat.sampleRate)")
+            print("Input Format Channels: \(inputFormat.channelCount)")
+
+            guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+                print("Invalid input format")
+                return
+            }
+
+            inputNode.installTap(onBus: 0, bufferSize: 2048, format: inputFormat) { [weak self] buffer, time in
                 guard let self = self else { return }
-                guard let pcmBuffer = buffer as? AVAudioPCMBuffer else {
-                    print("Error: Received non-PCM buffer")
-                    return
-                }
 
                 self.processingQueue.async {
-                    if let convertedBuffer = self.convertTo16000Hz(buffer: pcmBuffer, fromSampleRate: hwSampleRate) {
+                    if let convertedBuffer = self.convertTo16000HzMono(buffer: buffer) {
                         let recognizedText = self.recognizeData(buffer: convertedBuffer)
+                        if let data = recognizedText.data(using: .utf8) {
+                            do {
+                                if let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
+                                    var resultDict: [String: Any] = [:]
+                                    if let partialText = json["partial"] as? String {
+                                        resultDict["final"] = false
+                                        resultDict["text"] = partialText
+                                    } else if let finalText = json["text"] as? String {
+                                        resultDict["final"] = true
+                                        resultDict["text"] = finalText
+                                    }
 
-                        self.processingQueue.async {
-                            if let data = recognizedText.data(using: .utf8) {
-                                do {
-                                    if let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
-                                        var result = ""
-
-                                        if let partialText = json["partial"] as? String {
-                                            result = """
-                                            {
-                                                "final": false,
-                                                "text": "\(partialText)"
-                                            }
-                                            """
-                                        } else if let finalText = json["text"] as? String {
-                                            result = """
-                                            {
-                                                "final": true,
-                                                "text": "\(finalText)"
-                                            }
-                                            """
-                                        }
-
+                                    if let resultData = try? JSONSerialization.data(withJSONObject: resultDict, options: []),
+                                       let resultString = String(data: resultData, encoding: .utf8) {
                                         DispatchQueue.main.async {
-                                            self.onResult?(result)
+                                            self.onResult?(resultString)
                                         }
                                     }
-                                } catch {
-                                    print("Error parsing recognizedText as JSON: \(error.localizedDescription)")
                                 }
+                            } catch {
+                                print("Error parsing recognizedText as JSON: \(error.localizedDescription)")
                             }
                         }
+                    } else {
+                        print("Failed to convert buffer")
                     }
                 }
             }
@@ -136,29 +135,27 @@ import AVFoundation
         audioEngine.inputNode.removeTap(onBus: 0)
         audioEngine = nil
 
-        do {
-            try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
-        } catch {
-            print("Failed to deactivate audio session: \(error.localizedDescription)")
-        }
-
-        print("Audio engine stopped and session deactivated")
+        print("Audio engine stopped")
     }
 
-    private func convertTo16000Hz(buffer: AVAudioPCMBuffer, fromSampleRate: Double) -> AVAudioPCMBuffer? {
-        guard fromSampleRate != 16000 else { return buffer }
-
-        let inputFormat = buffer.format
-        let outputFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: true)!
-
-        guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
-            print("Error: Unable to create converter")
+    private func convertTo16000HzMono(buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard let outputFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: true) else {
+            print("Failed to create output format")
             return nil
         }
 
-        let frameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * 16000.0 / fromSampleRate)
+        guard let converter = AVAudioConverter(from: buffer.format, to: outputFormat) else {
+            print("Failed to create AVAudioConverter")
+            return nil
+        }
+
+        let inputChannelCount = Int(buffer.format.channelCount)
+        converter.channelMap = Array(repeating: 0, count: inputChannelCount)
+
+        let ratio = outputFormat.sampleRate / buffer.format.sampleRate
+        let frameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
         guard let convertedBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: frameCapacity) else {
-            print("Error: Unable to create converted buffer")
+            print("Failed to create converted buffer")
             return nil
         }
 
@@ -178,8 +175,8 @@ import AVFoundation
     }
 
     private func recognizeData(buffer: AVAudioPCMBuffer) -> String {
-        let dataLen = Int(buffer.frameLength * 2)
-        let channels = UnsafeBufferPointer(start: buffer.int16ChannelData, count: 1)
+        let dataLen = Int(buffer.frameLength * 2) // 2 bytes por muestra para pcmFormatInt16
+        let channels = UnsafeBufferPointer(start: buffer.int16ChannelData, count: Int(buffer.format.channelCount))
         let endOfSpeech = channels[0].withMemoryRebound(to: Int8.self, capacity: dataLen) {
             vosk_recognizer_accept_waveform(recognizer, $0, Int32(dataLen))
         }
