@@ -1,43 +1,74 @@
-# voskcap
+# VoskPlugin
+## Vosk Plugin for Ionic / Capacitor
 
-Speech-To-Text using Vosk
+A lightweight Capacitor plugin that enables **offline speech recognition** using the
+[Vosk](https://alphacephei.com/vosk/) engine, designed to be used in **Ionic / Angular**
+applications.
 
-## Install
+This plugin provides a simple bridge between Ionic apps and the native Vosk
+speech-to-text capabilities, without relying on cloud services.
+
+---
+
+## Features
+
+- 🎙️ Offline speech recognition (no internet required)
+- 📱 Ionic / Capacitor compatible
+- ⚡ Native performance via Vosk
+- 🔌 Simple API surface
+- 🧩 Designed to be extended or customized
+
+---
+
+## Supported Platforms
+
+- ✅ Android  
+- ✅ iOS
+
+---
+
+## Installation
 
 ```bash
-npm install voskcap
+npm install voskplugin
 npx cap sync
 ```
+---
 
-## API
+## Models
+A Vosk model may be present in this repository **for development and testing purposes only**.
 
-<docgen-index>
+The model is **not required** and **not intended for production use**.
 
-* [`startRecognition()`](#startrecognition)
-* [`stopRecognition()`](#stoprecognition)
+For real applications, you must download a compatible model directly from the
+official Vosk website:
+👉 https://alphacephei.com/vosk/models
 
-</docgen-index>
+add it to the following paths:
 
-<docgen-api>
-<!--Update the source file JSDoc comments and rerun docgen to update the docs below-->
+Android
+```android/src/main/assets/```
+iOS
+```ios/Sources/Resources/```
 
-### startRecognition()
+and update VoskCap.java & VoskCap.swift with the updated path.
 
-```typescript
-startRecognition() => Promise<{ text: string; }>
+---
+
+## Basic Usage
+```
+import { VoskPlugin } from 'voskplugin';
+
+await VoskPlugin.initialize({
+  modelPath: 'vosk-model-small-en-us'
+});
+
+VoskPlugin.startListening();
+
+VoskPlugin.addListener('onResult', (result) => {
+  console.log('Recognized text:', result.text);
+});
 ```
 
-**Returns:** <code>Promise&lt;{ text: string; }&gt;</code>
-
---------------------
-
-
-### stopRecognition()
-
-```typescript
-stopRecognition() => Promise<void>
-```
-
---------------------
-
-</docgen-api>
+## LICENSE
+Apache 2.0
