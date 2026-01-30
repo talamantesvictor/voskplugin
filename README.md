@@ -70,5 +70,19 @@ VoskPlugin.addListener('onResult', (result) => {
 });
 ```
 
+## Project Status
+
+This plugin was originally created for **personal use** to solve a specific need.
+
+It has been made public in case it helps others save time or serves as a reference
+for similar integrations.
+
+⚠️ **This project is not actively maintained.**
+No ongoing development, roadmap, or guaranteed support should be expected.
+
+That said, the code is functional, extensible, and free to use under the terms of
+the Apache 2.0 license.
+
+
 ## LICENSE
 Apache 2.0
